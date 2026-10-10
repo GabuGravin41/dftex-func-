@@ -1,0 +1,19 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints
+
+# Temporary kernel download folders
+kaggle_kernel/kernel_output*
+kaggle_kernel/test_output*
+*.log
+
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/

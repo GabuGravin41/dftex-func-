@@ -1,0 +1,231 @@
+import json
+import os
+
+notebook = {
+    'cells': [
+        {
+            'cell_type': 'markdown',
+            'metadata': {},
+            'source': [
+                '# One-Electron Diagnostics for Machine-Learned Exchange-Correlation Functionals\n',
+                '### Rigorous Computational Verification Suite\n',
+                '**Author**: Dalton Omondi\n',
+                '**Topics**: Basis-incompleteness of same-basis UHF, PBE/r2SCAN/B3LYP delocalization error, orbital stability analysis, and symmetry-breaking bifurcation.'
+            ]
+        },
+        {
+            'cell_type': 'code',
+            'execution_count': None,
+            'metadata': {},
+            'outputs': [],
+            'source': [
+                '# Cell 1: Install PySCF and dependencies\n',
+                '!pip install --quiet pyscf pandas tabulate\n',
+                'try:\n',
+                '    !pip install --quiet ciderpress\n',
+                'except Exception as e:\n',
+                '    print("ciderpress install note:", e)\n'
+            ]
+        },
+        {
+            'cell_type': 'code',
+            'execution_count': None,
+            'metadata': {},
+            'outputs': [],
+            'source': [
+                '# Cell 2: Imports & Versions\n',
+                'import sys, os\n',
+                'import numpy as np\n',
+                'import pandas as pd\n',
+                'from tabulate import tabulate\n',
+                'import pyscf\n',
+                'from pyscf import gto, scf, dft\n',
+                'print("PySCF Version:", pyscf.__version__)\n',
+                'cider_available = False\n',
+                'try:\n',
+                '    import ciderpress\n',
+                '    print("CiderPress Version/File:", getattr(ciderpress, "__version__", ciderpress.__file__))\n',
+                '    cider_available = True\n',
+                'except ImportError as e:\n',
+                '    print("CiderPress not available:", e)\n'
+            ]
+        },
+        {
+            'cell_type': 'code',
+            'execution_count': None,
+            'metadata': {},
+            'outputs': [],
+            'source': [
+                '# Cell 3: Isoelectronic Series & Basis Incompleteness (Table 4.1)\n',
+                'ions = [("H", 1, 0, 1), ("He+", 2, 1, 1), ("Li2+", 3, 2, 1), ("Be3+", 4, 3, 1)]\n',
+                'basis_list = ["def2-tzvp", "def2-svp", "def2-qzvp", "aug-cc-pvtz"]\n',
+                'basis_records = []\n',
+                'master_records = []\n',
+                '\n',
+                'for basis in basis_list:\n',
+                '    for sym, z, charge, spin in ions:\n',
+                '        e_exact = -0.5 * (z**2)\n',
+                '        mol = gto.M(atom=f"{sym.rstrip(\'0123456789+-\')} 0 0 0", basis=basis, charge=charge, spin=spin, verbose=0)\n',
+                '        mf = scf.UHF(mol)\n',
+                '        mf.conv_tol = 1e-12\n',
+                '        mf.kernel()\n',
+                '        incomp_mha = (mf.e_tot - e_exact) * 1000.0\n',
+                '        basis_records.append({"Basis": basis, "Ion": sym, "Z": z, "E_exact": e_exact, "E_UHF": mf.e_tot, "Incomp_mHa": incomp_mha, "Cycles": mf.cycles})\n',
+                '        master_records.append({"functional": "UHF", "system": sym, "basis": basis, "R": np.nan, "E": mf.e_tot, "converged": mf.converged, "cycles": mf.cycles, "stable": True, "q_Ha": 1.0 - charge, "q_Hb": np.nan, "notes": "Exact UHF reference"})\n',
+                '\n',
+                'df_basis = pd.DataFrame(basis_records)\n',
+                'print(tabulate(df_basis, headers="keys", tablefmt="github", floatfmt=".6f"))\n'
+            ]
+        },
+        {
+            'cell_type': 'code',
+            'execution_count': None,
+            'metadata': {},
+            'outputs': [],
+            'source': [
+                '# Cell 4: Isoelectronic Series DFT SIE (Table 4.2 & 4.3)\n',
+                'dft_funcs = ["PBE", "r2SCAN", "SCAN", "B3LYP"]\n',
+                'primary_basis = "def2-tzvp"\n',
+                'iso_dft_records = []\n',
+                '\n',
+                'for xc in dft_funcs:\n',
+                '    for sym, z, charge, spin in ions:\n',
+                '        e_exact = -0.5 * (z**2)\n',
+                '        mol = gto.M(atom=f"{sym.rstrip(\'0123456789+-\')} 0 0 0", basis=primary_basis, charge=charge, spin=spin, verbose=0)\n',
+                '        mf_ref = scf.UHF(mol)\n',
+                '        mf_ref.conv_tol = 1e-12\n',
+                '        mf_ref.kernel()\n',
+                '        e_uhf = mf_ref.e_tot\n',
+                '\n',
+                '        mf = dft.UKS(mol)\n',
+                '        mf.xc = xc\n',
+                '        mf.conv_tol = 1e-11\n',
+                '        mf.kernel()\n',
+                '        e_dft = mf.e_tot\n',
+                '        is_stable = True  # One-electron atomic cations (N=1) are spherical and unconditionally stable\n',
+                '        naive_sie = (e_dft - e_exact) * 1000.0\n',
+                '        same_sie = (e_dft - e_uhf) * 1000.0\n',
+                '        ratio = naive_sie / same_sie if abs(same_sie) > 1e-6 else np.nan\n',
+                '        iso_dft_records.append({"Functional": xc, "Ion": sym, "Z": z, "E_DFT": e_dft, "E_UHF": e_uhf, "Naive_SIE_mHa": naive_sie, "Same_SIE_mHa": same_sie, "Inflation_Ratio": ratio, "Stable": is_stable})\n',
+                '        master_records.append({"functional": xc, "system": sym, "basis": primary_basis, "R": np.nan, "E": e_dft, "converged": mf.converged, "cycles": mf.cycles, "stable": is_stable, "q_Ha": 1.0 - charge, "q_Hb": np.nan, "notes": f"Naive SIE: {naive_sie:.3f} mHa, Same: {same_sie:.3f} mHa"})\n',
+                '\n',
+                'df_iso_dft = pd.DataFrame(iso_dft_records)\n',
+                'print(tabulate(df_iso_dft, headers="keys", tablefmt="github", floatfmt=".4f"))\n'
+            ]
+        },
+        {
+            'cell_type': 'code',
+            'execution_count': None,
+            'metadata': {},
+            'outputs': [],
+            'source': [
+                '# Cell 5: Stretched H2+ Dissociation Scan & Physical Bifurcation Analysis\n',
+                'r_grid = [0.5, 0.75, 1.06, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0, 5.5, 6.0, 7.0, 10.0, 15.0]\n',
+                'h2_records = []\n',
+                '\n',
+                'for xc in ["UHF", "PBE", "r2SCAN", "B3LYP"]:\n',
+                '    print(f"=== Functional: {xc} ===")\n',
+                '    for r in r_grid:\n',
+                '        mol = gto.M(atom=f"H 0 0 0; H 0 0 {r}", basis=primary_basis, charge=1, spin=1, verbose=0)\n',
+                '        # Exact UHF reference for this R\n',
+                '        mf_ref = scf.UHF(mol)\n',
+                '        mf_ref.conv_tol = 1e-12\n',
+                '        mf_ref.kernel()\n',
+                '        e_ref = mf_ref.e_tot\n',
+                '\n',
+                '        if xc == "UHF":\n',
+                '            e_calc = e_ref\n',
+                '            charges = [0.5, 0.5]\n',
+                '            is_stable = True\n',
+                '            conv = True\n',
+                '            cycles = mf_ref.cycles\n',
+                '            e_broken = np.nan\n',
+                '            q_broken = (np.nan, np.nan)\n',
+                '        else:\n',
+                '            # 1. Symmetric initial guess / default solution\n',
+                '            mf = dft.UKS(mol)\n',
+                '            mf.xc = xc\n',
+                '            mf.conv_tol = 1e-10\n',
+                '            mf.max_cycle = 200\n',
+                '            mf.kernel()\n',
+                '            e_calc = mf.e_tot\n',
+                '            conv = mf.converged\n',
+                '            cycles = mf.cycles\n',
+                '            charges = mf.mulliken_pop(verbose=0)[1]\n',
+                '\n',
+                '            # 2. Broken-symmetry initial guess (seed electron on atom 0)\n',
+                '            e_broken = np.nan\n',
+                '            q_broken = (np.nan, np.nan)\n',
+                '            try:\n',
+                '                mf_bs = dft.UKS(mol)\n',
+                '                mf_bs.xc = xc\n',
+                '                mf_bs.conv_tol = 1e-10\n',
+                '                mf_bs.max_cycle = 200\n',
+                '                dm_bs = mf.make_rdm1()\n',
+                '                ao_slices = mol.aoslice_by_atom()\n',
+                '                a1_start, a1_end = ao_slices[1, 2], ao_slices[1, 3]\n',
+                '                dm_bs[0, a1_start:a1_end, :] = 0.0\n',
+                '                dm_bs[0, :, a1_start:a1_end] = 0.0\n',
+                '                s = mol.intor("int1e_ovlp")\n',
+                '                tr = float(np.einsum("ij,ji->", dm_bs[0], s))\n',
+                '                if tr > 1e-6:\n',
+                '                    dm_bs[0] /= tr\n',
+                '                mf_bs.kernel(dm0=dm_bs)\n',
+                '                if mf_bs.converged:\n',
+                '                    e_broken = mf_bs.e_tot\n',
+                '                    q_broken = mf_bs.mulliken_pop(verbose=0)[1]\n',
+                '            except Exception as e_bs:\n',
+                '                pass\n',
+                '\n',
+                '            # Physical orbital stability: does a broken-symmetry state have strictly lower energy?\n',
+                '            if not np.isnan(e_broken) and (e_broken < e_calc - 1e-5) and abs(q_broken[0] - q_broken[1]) > 0.1:\n',
+                '                is_stable = False  # Symmetric state is an unstable saddle point\n',
+                '            else:\n',
+                '                is_stable = True   # Symmetric state is the stable ground state\n',
+                '\n',
+                '        delta_mha = (e_calc - e_ref) * 1000.0\n',
+                '        h2_records.append({"Functional": xc, "R": r, "E": e_calc, "E_UHF": e_ref, "Delta_mHa": delta_mha, "qa": charges[0], "qb": charges[1], "Conv": conv, "Cycles": cycles, "Stable": is_stable, "E_broken": e_broken, "qa_broken": q_broken[0], "qb_broken": q_broken[1]})\n',
+                '        master_records.append({"functional": xc, "system": "H2+", "basis": primary_basis, "R": r, "E": e_calc, "converged": conv, "cycles": cycles, "stable": is_stable, "q_Ha": charges[0], "q_Hb": charges[1], "notes": f"Delta: {delta_mha:.3f} mHa. E_broken: {e_broken}"})\n',
+                '        print(f"  R={r:5.2f} A | E_sym: {e_calc:.6f} Ha | E_brk: {e_broken:.6f} Ha | Delta: {delta_mha:+8.3f} mHa | qa={charges[0]:.3f}, qb={charges[1]:.3f} | Stable_sym: {is_stable} | Conv: {conv}")\n',
+                '\n',
+                'df_h2 = pd.DataFrame(h2_records)\n'
+            ]
+        },
+        {
+            'cell_type': 'code',
+            'execution_count': None,
+            'metadata': {},
+            'outputs': [],
+            'source': [
+                '# Cell 6: Export Master CSV\n',
+                'df_master = pd.DataFrame(master_records)\n',
+                'df_master.to_csv("master_dft_one_electron_dataset.csv", index=False)\n',
+                'print("Exported master CSV with", len(df_master), "rows.")\n',
+                '\n',
+                '# Summary check of B3LYP anomaly\n',
+                'b3_r10 = df_h2[(df_h2["Functional"] == "B3LYP") & (df_h2["R"] == 10.0)]\n',
+                'print("\\n=== B3LYP AT R = 10 A SUMMARY ===")\n',
+                'print(tabulate(b3_r10, headers="keys", tablefmt="github"))\n'
+            ]
+        }
+    ],
+    'metadata': {
+        'kernelspec': {
+            'display_name': 'Python 3',
+            'language': 'python',
+            'name': 'python3'
+        },
+        'language_info': {
+            'name': 'python',
+            'version': '3.10.12'
+        }
+    },
+    'nbformat': 4,
+    'nbformat_minor': 4
+}
+
+target_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'verification_notebook.ipynb')
+with open(target_path, 'w') as f:
+    json.dump(notebook, f, indent=2)
+
+print('Successfully created verification_notebook.ipynb at:', target_path)

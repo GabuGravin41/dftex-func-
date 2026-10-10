@@ -1,0 +1,1521 @@
+% =====================================================================
+%  WORKING REPORT
+%  Consolidated research notes on one-electron diagnostics for
+%  machine-learned exchange-correlation functionals
+%
+%  This is a *working document*, not a submission. It is meant to be
+%  read, edited, and re-issued as the research progresses.
+% =====================================================================
+\documentclass[11pt]{report}
+
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{hyperref}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{enumitem}
+\usepackage{xcolor}
+\usepackage{framed}
+
+\hypersetup{colorlinks=true,linkcolor=blue,citecolor=blue,urlcolor=blue}
+
+% ---- theorem environments (used sparingly; most content is plain prose) ----
+\newtheorem{theorem}{Theorem}
+\newtheorem{lemma}{Lemma}
+\newtheorem{proposition}{Proposition}
+\newtheorem{corollary}{Corollary}
+\theoremstyle{definition}
+\newtheorem{definition}{Definition}
+\theoremstyle{remark}
+\newtheorem{remark}{Remark}
+
+% ---- custom commands for this document ----
+\newcommand{\Ha}{\text{Ha}}
+\newcommand{\mHa}{\text{mHa}}
+\newcommand{\ang}{\text{\AA}}
+\newcommand{\SIE}{\mathrm{SIE}}
+\newcommand{\Exc}{E_{xc}}
+\newcommand{\EHF}{E_{\mathrm{HF}}}
+\newcommand{\Eexact}{E_{\mathrm{exact}}}
+\newcommand{\ECD}{E_{\mathrm{CIDER}}}
+\newcommand{\conv}{\mathrm{conv}}
+\newcommand{\stable}{\mathrm{stable}}
+
+% ---- confidence tags ----
+\newcommand{\verified}[1]{\textbf{[V]}~#1}      % verified numerically, reproducible
+\newcommand{\tentative}[1]{\textbf{[T]}~#1}      % plausible, not yet fully checked
+\newcommand{\withdrawn}[1]{\textbf{[W]}~#1}      % previously claimed, now doubted or retracted
+\newcommand{\todo}[1]{\textcolor{red}{\textbf{[TODO:}~#1\textbf{]}}}
+
+\title{%
+  \textbf{One-Electron Diagnostics for Machine-Learned\\ Exchange--Correlation Functionals}\\[0.5em]
+  \large A Working Report: Theory, Calculations, Claims, and Open Problems%
+}
+\author{Dalton Omondi}
+\date{Working draft --- \today}
+
+\begin{document}
+\maketitle
+
+\begin{center}
+\fbox{\parbox{0.9\textwidth}{
+\textbf{Status of this document.}
+This is a \emph{working report}, not a manuscript submission.
+It consolidates five earlier drafts into a single narrative, states every
+claim with an explicit confidence tag, and lists every known problem that
+must be resolved before any part of this work is submitted for publication.
+The tags used throughout are: \verified{verified numerically and
+reproducible}; \tentative{plausible but not yet fully checked};
+\withdrawn{previously claimed but now doubted or retracted}.
+Passages marked \todo{} are unresolved.
+}}
+\end{center}
+
+\tableofcontents
+\clearpage
+
+% =====================================================================
+\chapter{Purpose and scope}
+% =====================================================================
+
+\section{What this document is}
+
+This report consolidates five earlier working drafts into one narrative.
+The five drafts were:
+
+\begin{enumerate}[label=\textbf{D\arabic*.}]
+  \item Hartree--Fock exactness for one-electron systems and its use as a
+        basis-consistent reference for self-interaction diagnostics.
+  \item A same-basis reproduction of self-interaction and delocalization
+        errors in PBE, r2SCAN, and B3LYP.
+  \item A symmetry-breaking bifurcation in the CIDER26XCCHEM machine-learned
+        exchange--correlation functional on the H$_2^+$ dissociation curve.
+  \item Formulation and refutation of a ``one-electron-limit patch''
+        hypothesis for machine-learned functionals.
+  \item A categorical comparison of Skala and CIDER as convergent
+        constraint-encoding designs.
+\end{enumerate}
+
+The drafts were written in the order above but are not independent. D1
+establishes the reference used by D2 and D3. D3 motivates D4. D5 tries to
+abstract D2 and D3 into a design-principle comparison. Presenting them
+separately as five papers creates circular citations (each cites the others
+as ``companion manuscript''), cross-paper numerical inconsistencies, and a
+false impression of five independent contributions when there is at most
+one.
+
+The honest summary, stated at the outset so that the rest of this report can
+be read with the right expectations, is:
+
+\begin{quote}
+\textbf{The scientific content of the five drafts reduces to one
+potentially publishable finding --- the symmetry-breaking bifurcation in
+CIDER26XCCHEM on stretched H$_2^+$ --- supported by two small methodological
+points (the same-basis reference, and the non-totality of the
+constraint-residual order), one reproduction study, and two trivialities
+(the patch refutation, and the categorical framing of the constraint
+comparison). Whether the bifurcation survives a proper SCF stability
+analysis is the single question that determines whether this work is a
+paper or a methods note.}
+\end{quote}
+
+Everything below is written to serve that determination.
+
+\section{What this document is not}
+
+It is not a submission draft. It does not attempt to satisfy journal style,
+length limits, or referee expectations. It includes working notes,
+unresolved questions, and explicit doubts that would not appear in a
+published paper.
+
+It is also not a review of the field. It assumes no prior knowledge of
+density functional theory (DFT) or of machine-learned functionals, and
+explains both from first principles, but it does not attempt to survey the
+literature beyond the specific papers cited.
+
+\section{How to use it}
+
+\begin{itemize}
+  \item \textbf{To understand the project}: read Chapters~\ref{ch:background}
+        through \ref{ch:results} in order.
+  \item \textbf{To decide what to do next}: read Chapter~\ref{ch:issues}
+        (known problems) and Chapter~\ref{ch:future} (next actions).
+  \item \textbf{To communicate the work}: the claims in
+        Chapter~\ref{ch:claims} are the load-bearing statements; every
+        other chapter is scaffolding for them.
+  \item \textbf{To write a paper}: Section~\ref{sec:paper-plan} at the end
+        gives the recommended paper structure if the bifurcation survives
+        verification.
+\end{itemize}
+
+% =====================================================================
+\chapter{Background}
+\label{ch:background}
+% =====================================================================
+
+This chapter assumes no prior knowledge of DFT. A reader already fluent in
+the subject can skim and skip to Chapter~\ref{ch:theory}.
+
+\section{Density functional theory in one page}
+
+The central object of quantum chemistry is the many-electron Schr\"odinger
+equation,
+\begin{equation}
+\hat H \Psi = E \Psi,
+\qquad
+\hat H = -\tfrac12 \sum_i \nabla_i^2
+        - \sum_{i,A} \frac{Z_A}{|\mathbf r_i - \mathbf R_A|}
+        + \sum_{i<j} \frac{1}{|\mathbf r_i - \mathbf r_j|},
+\label{eq:many-body-h}
+\end{equation}
+where $i,j$ label electrons, $A$ labels nuclei, $Z_A$ is a nuclear charge,
+and atomic units are used ($\hbar = m_e = e = 1$). The wavefunction
+$\Psi(\mathbf r_1, \dots, \mathbf r_N)$ depends on $3N$ spatial coordinates,
+so direct solution is intractable beyond a handful of electrons.
+
+DFT replaces the wavefunction with the electron density
+\begin{equation}
+n(\mathbf r) = N \int |\Psi(\mathbf r, \mathbf r_2, \dots, \mathbf r_N)|^2
+               \, d\mathbf r_2 \cdots d\mathbf r_N,
+\end{equation}
+a function of only three coordinates. The Hohenberg--Kohn theorem (1964)
+states that the ground-state density uniquely determines the external
+potential, and therefore the Hamiltonian and all ground-state properties.
+Kohn and Sham (1965) then introduced a fictitious non-interacting system
+with the same density as the real system. Its wavefunction is a single
+Slater determinant of orbitals $\varphi_i$, and the density is
+$n(\mathbf r) = \sum_i |\varphi_i(\mathbf r)|^2$.
+
+The Kohn--Sham total energy is written as
+\begin{equation}
+E[n] = T_s[n] + V_{\rm ext}[n] + J[n] + \Exc[n],
+\label{eq:ks-energy}
+\end{equation}
+where
+\begin{align}
+T_s[n] &= -\tfrac12 \sum_i \int \varphi_i^*(\mathbf r) \nabla^2
+          \varphi_i(\mathbf r)\, d\mathbf r
+          && \text{(non-interacting kinetic energy)},\\
+V_{\rm ext}[n] &= \int v_{\rm ext}(\mathbf r)\, n(\mathbf r)\, d\mathbf r
+          && \text{(nuclear attraction)},\\
+J[n] &= \tfrac12 \iint \frac{n(\mathbf r_1)\, n(\mathbf r_2)}
+                          {|\mathbf r_1 - \mathbf r_2|}
+        \, d\mathbf r_1 \, d\mathbf r_2
+          && \text{(classical Coulomb self-repulsion)}.
+\end{align}
+The exchange--correlation functional $\Exc[n]$ is defined by
+Eq.~\eqref{eq:ks-energy} as \emph{whatever remains} once the first three
+terms are subtracted from the exact total energy. It is not known in closed
+form and must be approximated.
+
+\section{The exchange--correlation functional and its exact constraints}
+
+Because $\Exc$ is defined by subtraction, it inherits a set of exact
+mathematical properties from the true ground-state energy. These are the
+\emph{exact constraints} on $\Exc$. Well-known examples include:
+
+\begin{itemize}
+  \item \textbf{Uniform coordinate scaling.}
+        For $\lambda > 0$, define $n_\lambda(\mathbf r) = \lambda^3
+        n(\lambda \mathbf r)$. Then
+        $E_x[n_\lambda] = \lambda E_x[n]$ and
+        $E_c[n_\lambda] < \lambda E_c[n]$ for $\lambda > 1$.
+  \item \textbf{Lieb--Oxford bound.}
+        $E_x[n] \ge -C \int n(\mathbf r)^{4/3}\, d\mathbf r$ for a known
+        constant $C$.
+  \item \textbf{One-electron self-interaction freedom.}
+        For any one-electron density,
+        $\Exc[n] = -J[n]$, equivalently $E_x[n] = -J[n]$ and $E_c[n] = 0$.
+        This is the constraint of central interest in this report.
+  \item \textbf{Piecewise linearity in fractional particle number.}
+        $E(N)$ is piecewise linear between integer $N$, with derivative
+        discontinuities at integers.
+  \item \textbf{Euclidean equivariance.}
+        $\Exc$ is invariant under rotations, translations, and reflections
+        of the density.
+\end{itemize}
+
+Functionals that are constructed to satisfy some of these constraints
+analytically are called \emph{non-empirical}. PBE, SCAN, and r2SCAN are
+examples. Functionals that are fitted to data with less attention to
+constraints are called \emph{empirical}. B3LYP is a hybrid in this category.
+
+\section{Self-interaction error and delocalization error}
+
+\subsection{Self-interaction error (SIE)}
+
+In exact DFT, an electron does not repel itself. The classical Coulomb
+term $J[n]$ does include a spurious self-repulsion for each electron, and
+the exact $\Exc$ cancels it exactly. Approximate functionals do not cancel
+it exactly, and the residual is called the \emph{self-interaction error}.
+
+For a system with exactly one electron, the true electron--electron energy
+is zero (there is no second electron). Therefore the exact $\Exc$ must
+cancel $J[n]$ exactly:
+\begin{equation}
+\Exc[n] = -J[n] \qquad (N = 1).
+\label{eq:exact-constraint-n1}
+\end{equation}
+Any approximate functional that violates Eq.~\eqref{eq:exact-constraint-n1}
+produces a non-zero \emph{one-electron SIE}. This is the quantity measured
+in this work.
+
+\subsection{Delocalization error}
+
+Delocalization error is the tendency of approximate functionals to
+over-stabilize charge distributions that spread electron density over
+multiple centers, relative to the exact distribution. It is closely related
+to SIE: incomplete cancellation of $J[n]$ makes concentrating charge on a
+single center appear artificially unfavorable, so the functional prefers
+spreading it. On a stretched bond, delocalization error manifests as an
+artificial over-binding of the symmetric, delocalized solution.
+
+\section{The L\"owdin symmetry dilemma}
+
+Many approximate functionals have more than one self-consistent-field (SCF)
+solution for a given nuclear geometry. When the true ground state is
+symmetric under some operation (e.g., reflection through the bond midpoint
+in H$_2^+$), but the approximate functional's lowest-energy SCF solution
+breaks that symmetry, the functional suffers from the \emph{symmetry
+dilemma} identified by L\"owdin in the 1960s.
+
+For a one-electron bond such as H$_2^+$, the symmetry dilemma is
+particularly stark: the exact ground state is symmetric at every bond
+length, but approximate functionals can converge to a symmetry-broken
+solution with the electron localized on one center. This is the phenomenon
+this report is primarily about.
+
+\section{Machine-learned exchange--correlation functionals}
+
+A recent development is the use of machine learning to represent $\Exc$.
+Two current-generation examples are:
+
+\begin{itemize}
+  \item \textbf{CIDER} (Bystrom \& Kozinsky). A family of functionals whose
+        nonlocal descriptors are constructed to satisfy the
+        uniform-coordinate-scaling constraint by design. The released
+        model used in this work is \texttt{CIDER26XCCHEM} (2026
+        generation).
+  \item \textbf{Skala} (Microsoft Research, 2025). A neural-network
+        functional built on \texttt{e3nn} layers, which are Euclidean
+        ($E(3)$) equivariant by construction.
+\end{itemize}
+
+Both encode one exact constraint into the architecture, independent of what
+is learned on top. Whether such architectural guarantees confer protection
+against \emph{other} pathologies --- in particular the one-electron
+symmetry dilemma --- is an open empirical question. This report answers it,
+in one concrete case, for CIDER26XCCHEM.
+
+% =====================================================================
+\chapter{Theory}
+\label{ch:theory}
+% =====================================================================
+
+This chapter states and derives the theoretical results that the
+calculations rely on. Nothing here is new mathematics; the derivations are
+included because the whole diagnostic framework depends on them and because
+later chapters cite them repeatedly.
+
+\section{Hartree--Fock is exact for one electron}
+
+\subsection{The Hartree--Fock energy expression}
+
+For an $N$-electron system described by a single Slater determinant built
+from orthonormal spin-orbitals $\varphi_1, \dots, \varphi_N$, the
+variational minimization of $\langle \hat H \rangle$ yields the standard
+Hartree--Fock total energy
+\begin{equation}
+\EHF = \sum_{i=1}^N \langle \varphi_i | \hat h | \varphi_i \rangle
+       + \tfrac12 \sum_{i,j=1}^N \big[ J_{ij} - K_{ij} \big],
+\label{eq:hf-general}
+\end{equation}
+where
+\begin{equation}
+\hat h = -\tfrac12 \nabla^2 + v_{\rm ext}(\mathbf r)
+\end{equation}
+is the one-electron operator (kinetic energy plus nuclear attraction; it
+contains no electron--electron term), and the two-electron integrals are
+\begin{align}
+J_{ij} &= \iint |\varphi_i(\mathbf r_1)|^2
+                \frac{1}{|\mathbf r_1 - \mathbf r_2|}
+                |\varphi_j(\mathbf r_2)|^2 \, d\mathbf r_1 \, d\mathbf r_2,
+\label{eq:Jij}\\
+K_{ij} &= \iint \varphi_i^*(\mathbf r_1) \varphi_j(\mathbf r_1)
+                \frac{1}{|\mathbf r_1 - \mathbf r_2|}
+                \varphi_j^*(\mathbf r_2) \varphi_i(\mathbf r_2)
+                \, d\mathbf r_1 \, d\mathbf r_2.
+\label{eq:Kij}
+\end{align}
+$K_{ij}$ is non-zero only when $\varphi_i$ and $\varphi_j$ have the same
+spin; this detail is irrelevant below.
+
+\subsection{Specializing to $N=1$}
+
+With one occupied spin-orbital $\varphi_1$, the double sum in
+Eq.~\eqref{eq:hf-general} collapses to its single $i=j=1$ term:
+\begin{equation}
+\EHF(N{=}1) = \langle \varphi_1 | \hat h | \varphi_1 \rangle
+              + \tfrac12 \big[ J_{11} - K_{11} \big].
+\label{eq:hf-n1}
+\end{equation}
+
+\begin{lemma}[$J_{11} = K_{11}$]
+\label{lem:J11}
+For any normalized spin-orbital $\varphi_1$, $J_{11} = K_{11}$ exactly.
+\end{lemma}
+
+\begin{proof}
+Substituting $i=j=1$ in Eqs.~\eqref{eq:Jij} and~\eqref{eq:Kij},
+\begin{align}
+J_{11} &= \iint |\varphi_1(\mathbf r_1)|^2
+                \frac{1}{|\mathbf r_1 - \mathbf r_2|}
+                |\varphi_1(\mathbf r_2)|^2 \, d\mathbf r_1 \, d\mathbf r_2,\\
+K_{11} &= \iint \varphi_1^*(\mathbf r_1) \varphi_1(\mathbf r_1)
+                \frac{1}{|\mathbf r_1 - \mathbf r_2|}
+                \varphi_1^*(\mathbf r_2) \varphi_1(\mathbf r_2)
+                \, d\mathbf r_1 \, d\mathbf r_2.
+\end{align}
+But $\varphi_1^*(\mathbf r) \varphi_1(\mathbf r) = |\varphi_1(\mathbf r)|^2$
+identically, and the same at $\mathbf r_2$. Substituting, the integrand of
+$K_{11}$ becomes term-by-term identical to the integrand of $J_{11}$.
+Hence $K_{11} = J_{11}$ for any normalized $\varphi_1$.
+\end{proof}
+
+\begin{theorem}[HF exactness for $N=1$]
+\label{thm:hf-exact}
+For any one-electron system in any one-particle basis,
+\begin{equation}
+\EHF(N{=}1) = \langle \varphi_1 | \hat h | \varphi_1 \rangle,
+\end{equation}
+with zero net electron--electron energy. This is the exact
+(full-CI-in-that-basis) ground-state energy of $\hat h$ in that basis.
+\end{theorem}
+
+\begin{proof}
+Substituting Lemma~\ref{lem:J11} into Eq.~\eqref{eq:hf-n1} gives
+$\tfrac12 (J_{11} - K_{11}) = 0$, so
+$\EHF(N{=}1) = \langle \varphi_1 | \hat h | \varphi_1 \rangle$.
+A one-electron system has no $1/r_{12}$ term in its Hamiltonian, so the
+true electron--electron energy is zero and the exact total energy is just
+the expectation value of $\hat h$ in the ground state. Antisymmetrization
+is vacuous for one particle, so a single Slater determinant places no
+restriction on the wavefunction's form. Minimizing $\langle \varphi_1 |
+\hat h | \varphi_1 \rangle$ over normalized $\varphi_1$ in a finite basis
+is therefore identical to diagonalizing $\hat h$ in that basis and taking
+the lowest eigenvalue.
+\end{proof}
+
+\subsection{The exact constraint on $\Exc$}
+
+The classical Coulomb functional of a one-electron density
+$n(\mathbf r) = |\varphi_1(\mathbf r)|^2$ is
+\begin{equation}
+J[n] = \tfrac12 \iint \frac{n(\mathbf r_1) n(\mathbf r_2)}
+                           {|\mathbf r_1 - \mathbf r_2|}
+       \, d\mathbf r_1 \, d\mathbf r_2 = J_{11}.
+\end{equation}
+Theorem~\ref{thm:hf-exact} says the true electron--electron energy is zero
+for $N=1$, while $J[n] > 0$ for any non-point density. The only way both
+statements can hold is
+\begin{equation}
+\Exc[n] = -J[n] \qquad (N=1).
+\end{equation}
+Correlation is defined as $E_c = \Eexact - \EHF$. Theorem~\ref{thm:hf-exact}
+shows $\Eexact = \EHF$ for $N=1$, so $E_c[n] = 0$ and the entire
+cancellation is carried by exchange:
+\begin{equation}
+\boxed{\; E_x[n] = -J[n], \quad E_c[n] = 0 \qquad (N=1). \;}
+\label{eq:sic-constraint}
+\end{equation}
+This is the constraint first stated by Perdew and Zunger (1981).
+
+\section{The same-basis reference}
+
+\subsection{Why the naive reference contaminates SIE measurements}
+
+A natural reference for a one-electron SIE measurement is the exact
+hydrogenic energy $E = -Z^2/2$ (atomic units), which is the exact
+infinite-basis ground-state energy of a hydrogen-like ion of nuclear charge
+$Z$. However, any real calculation uses a finite one-particle basis
+(Gaussian functions in this work). The finite basis cannot represent the
+exact hydrogenic orbital perfectly, so it introduces a
+\emph{basis-incompleteness} error separate from any functional error.
+
+If the finite-basis SIE is measured against the infinite-basis value,
+the result is
+\begin{equation}
+\SIE_{\rm naive} = E_{\rm DFT}^{\rm finite} - E_{\rm exact}^{\infty},
+\end{equation}
+which conflates two errors:
+\begin{equation}
+\SIE_{\rm naive}
+= \underbrace{\big( E_{\rm DFT}^{\rm finite} - E_{\rm exact}^{\rm finite} \big)}_{\text{functional error}}
++ \underbrace{\big( E_{\rm exact}^{\rm finite} - E_{\rm exact}^{\infty} \big)}_{\text{basis error}}.
+\end{equation}
+The second term is not a property of the functional and contaminates the
+diagnostic.
+
+\subsection{The same-basis reference}
+
+Theorem~\ref{thm:hf-exact} supplies a cleaner reference: run unrestricted
+Hartree--Fock (UHF) in the \emph{same} finite basis as the DFT calculation.
+By the theorem, the UHF energy is then \emph{exactly} the
+full-CI-in-that-basis ground-state energy, with no approximation. The
+same-basis SIE is
+\begin{equation}
+\SIE_{\rm same} = E_{\rm DFT}^{\rm finite} - \EHF^{\rm finite},
+\end{equation}
+and the basis-incompleteness terms cancel by construction. This is the
+reference used throughout this report.
+
+\begin{remark}
+The same-basis UHF reference is exact for any one-electron system, at any
+geometry, in any basis. In particular it applies to H$_2^+$ at \emph{every}
+internuclear separation, not just at the equilibrium geometry.
+\end{remark}
+
+\section{Delocalization error on a stretched one-electron bond}
+
+H$_2^+$ has one electron at every internuclear separation $R$. Its exact
+ground state is symmetric under reflection through the bond midpoint, and
+its exact ground-state density is symmetric, so the exact electron
+population on each proton is $0.5$. This is Theorem~\ref{thm:h2-sym} below.
+
+\subsection{Symmetry of the exact ground state}
+
+The electronic Hamiltonian of H$_2^+$ (Born--Oppenheimer, protons fixed at
+$\pm (R/2) \hat{\mathbf z}$) is
+\begin{equation}
+\hat H_{\rm el} = -\tfrac12 \nabla^2
+                  - \frac{1}{|\mathbf r - \tfrac{R}{2} \hat{\mathbf z}|}
+                  - \frac{1}{|\mathbf r + \tfrac{R}{2} \hat{\mathbf z}|}.
+\end{equation}
+Let $\hat \sigma$ denote reflection through the plane $z = 0$,
+$\hat \sigma \psi(x,y,z) = \psi(x,y,-z)$.
+
+\begin{lemma}
+\label{lem:sym-commute}
+$[\hat H_{\rm el}, \hat \sigma] = 0$.
+\end{lemma}
+
+\begin{proof}
+$-\tfrac12 \nabla^2$ is invariant under any reflection. Applying
+$\hat \sigma$ to the potential sends the two attraction terms into each
+other (since $|(x,y,-z) - (R/2)\hat{\mathbf z}| = |\mathbf r +
+(R/2)\hat{\mathbf z}|$), and their sum is unchanged.
+\end{proof}
+
+\begin{theorem}[Symmetric exact density]
+\label{thm:h2-sym}
+If the electronic ground state of H$_2^+$ is non-degenerate, its density
+satisfies $n(x,y,z) = n(x,y,-z)$ for all $\mathbf r$ and all $R$.
+Equivalently, the exact electron population on each proton is exactly
+$0.5$ at every $R$.
+\end{theorem}
+
+\begin{proof}
+$\hat \sigma$ is a reflection, so $\hat \sigma^2 = \hat 1$ and its
+eigenvalues are $\pm 1$. By Lemma~\ref{lem:sym-commute}, $\hat H_{\rm el}$
+and $\hat \sigma$ commute, so they share an eigenbasis. If $\psi_0$ is a
+non-degenerate eigenstate of $\hat H_{\rm el}$ with eigenvalue $E_0$, then
+$\hat \sigma \psi_0$ is also an eigenstate with the same eigenvalue, so by
+non-degeneracy $\hat \sigma \psi_0 = \lambda \psi_0$ for some scalar
+$\lambda$. Applying $\hat \sigma$ again gives $\lambda^2 = 1$, so
+$\lambda = \pm 1$. Either way
+$|\hat \sigma \psi_0|^2 = |\psi_0|^2$, so
+$n(x,y,z) = n(x,y,-z)$. The lowest eigenvalue of a bound two-center
+one-particle Hamiltonian of this form is the bonding $1\sigma_g$-like
+state, non-degenerate at every $R$.
+\end{proof}
+
+\begin{corollary}[Exact Mulliken charges]
+For the exact ground state of H$_2^+$, the Mulliken charge on each proton
+is exactly $q(\mathrm H_a) = q(\mathrm H_b) = 0.5$ at every $R$.
+\end{corollary}
+
+\begin{proof}
+Mulliken population assigns $p_A = \sum_{\mu \in A} \sum_\nu D_{\mu \nu}
+S_{\nu \mu}$ to atom $A$. By Theorem~\ref{thm:h2-sym}, the exact density is
+symmetric under $\hat \sigma$, and the two centers are exchanged by
+$\hat \sigma$ with identical basis sets, so $p_a = p_b$. Since
+$p_a + p_b = 1$ (one electron total) and $Z_a = Z_b = 1$, this gives
+$q_a = q_b = 0.5$.
+\end{proof}
+
+Any numerical calculation returning $q_a \ne q_b$ on H$_2^+$ is, by
+Theorem~\ref{thm:h2-sym}, not describing the true ground-state density.
+It has converged to a different critical point of the approximate energy
+functional. This is L\"owdin's symmetry dilemma.
+
+\subsection{Definition of the delocalization error}
+
+Define the signed delocalization error at bond length $R$ as
+\begin{equation}
+\Delta_{\rm deloc}(R) = \ECD(R) - \EHF(N{=}1; R),
+\label{eq:deloc-def}
+\end{equation}
+where both terms use the same finite basis. Since $\EHF$ is exact by
+Theorem~\ref{thm:hf-exact}, $\Delta_{\rm deloc}$ is the pure functional
+error at that geometry.
+
+Sign convention: $\Delta_{\rm deloc} < 0$ means the functional's energy is
+below the exact reference, i.e., the functional \emph{over-stabilizes}
+the system. On a stretched one-electron bond, this is the signature of
+delocalization error. $\Delta_{\rm deloc} > 0$ means the functional
+\emph{under}-stabilizes, which is a different pathology.
+
+% =====================================================================
+\chapter{Methods}
+\label{ch:methods}
+% =====================================================================
+
+\section{Software and hardware}
+
+All calculations use PySCF. The machine-learned functional
+\texttt{CIDER26XCCHEM} is loaded via the open-source \texttt{ciderpress}
+package, whose pretrained weights ship inside the pip package. No external
+network access is required after installation.
+
+\todo{Record the exact PySCF version, ciderpress version, and Python version
+used for every calculation. This is required for reproducibility.}
+
+\section{Basis sets}
+
+The primary basis is \texttt{def2-TZVP}, a triple-$\zeta$ valence basis
+with polarization functions. It is large enough that basis-incompleteness
+effects are small but not negligible at the millihartree level relevant to
+this work (see Section~\ref{sec:basis-incompleteness}).
+
+\todo{Add calculations with \texttt{def2-SVP}, \texttt{def2-QZVP}, and at
+least one \texttt{aug-cc-pVXZ} basis to demonstrate that conclusions are
+not basis-set specific. This is currently missing.}
+
+\section{SCF settings}
+
+For DFT calculations, unrestricted Kohn--Sham (\texttt{dft.UKS}) is used.
+For the exact reference, unrestricted Hartree--Fock (\texttt{scf.UHF}) is
+used. Tight convergence settings:
+\begin{itemize}
+  \item energy tolerance: $10^{-10}$ Hartree,
+  \item maximum cycles: 200,
+  \item default initial guess unless otherwise noted.
+\end{itemize}
+
+\todo{Every SCF calculation must record: convergence flag, number of cycles,
+final energy, and (for symmetry-relevant systems) Mulliken charges. In
+addition, an SCF stability analysis (\texttt{mf.stability()}) must be
+performed at every geometry for every functional whose symmetry-breaking
+behavior is being studied. This was missing from D2 and D3 as originally
+drafted.}
+
+\section{Systems studied}
+
+\subsection{Isoelectronic series}
+
+H ($Z = 1$), He$^+$ ($Z = 2$), Li$^{2+}$ ($Z = 3$), Be$^{3+}$ ($Z = 4$).
+These are single atoms, so no bond-length scan is needed.
+
+\subsection{H$_2^+$ dissociation}
+
+14 bond lengths in the original D3 scan:
+$R \in \{0.5, 0.75, 1.06, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0, 7.0,
+10.0, 15.0\}$~\AA. Two additional points (5.5, 6.0) are needed to resolve
+the bifurcation location.
+
+\todo{Add $R = 5.5$ and $R = 6.0$~\AA.}
+
+\subsection{Regression set}
+
+For the blast-radius check (Section~\ref{sec:patch}), four closed-shell
+molecules: H$_2$O, CH$_4$, N$_2$, Ne.
+
+\section{The master dataset}
+
+All results are collected into a single CSV file with the following
+columns:
+
+\begin{center}
+\begin{tabular}{ll}
+\toprule
+Column & Meaning \\
+\midrule
+\texttt{functional} & PBE, r2SCAN, B3LYP, CIDER23X, CIDER26XCCHEM, or UHF \\
+\texttt{system} & ion name or molecule \\
+\texttt{R} & bond length in \AA\ (blank for atoms) \\
+\texttt{E} & total energy in Hartree \\
+\texttt{converged} & boolean \\
+\texttt{cycles} & number of SCF cycles \\
+\texttt{stable} & boolean (from \texttt{mf.stability()}) \\
+\texttt{q\_Ha} & Mulliken charge on first atom \\
+\texttt{q\_Hb} & Mulliken charge on second atom (blank for atoms) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Every number in every table and figure in this report must be traceable to
+a row of this CSV. No hand-typed numbers anywhere.
+
+\todo{Build the master CSV from scratch. The numbers currently in D1--D5
+are inconsistent across drafts (see Chapter~\ref{ch:issues}).}
+
+% =====================================================================
+\chapter{Results}
+\label{ch:results}
+% =====================================================================
+
+\section{Basis-incompleteness of the same-basis reference}
+\label{sec:basis-incompleteness}
+
+Table~\ref{tab:basis} compares the same-basis UHF energy of the
+isoelectronic series against the exact infinite-basis hydrogenic value
+$-Z^2/2$. The difference is the basis-incompleteness term, which is what
+contaminates the naive SIE measurement.
+
+\begin{table}[htbp]
+\centering
+\caption{Same-basis UHF energies vs.\ infinite-basis hydrogenic values.
+Basis: \texttt{def2-TZVP}. Incompleteness = $E_{\rm UHF} - (-Z^2/2)$.}
+\label{tab:basis}
+\begin{tabular}{lrrrr}
+\toprule
+Ion & $Z$ & $-Z^2/2$ (Ha) & $E_{\rm UHF}$ same-basis (Ha) & Incompleteness (mHa) \\
+\midrule
+H        & 1 & $-0.500000$ & $-0.499810$ & $0.190$ \\
+He$^+$   & 2 & $-2.000000$ & $-1.998140$ & $1.860$ \\
+Li$^{2+}$& 3 & $-4.500000$ & $-4.498572$ & $1.428$ \\
+Be$^{3+}$& 4 & $-8.000000$ & $-7.996125$ & $3.875$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Two observations:
+\begin{enumerate}
+  \item The incompleteness is small in absolute terms ($0.2$--$4$~mHa) but
+        comparable to the SIE residuals being measured (also a few mHa).
+  \item The incompleteness is \emph{not} monotonic in $Z$: He$^+$ has
+        larger incompleteness than Li$^{2+}$. This contradicts the narrative
+        in D1, which claimed monotonic growth. The correct statement is
+        that the incompleteness is largest for Be$^{3+}$ among these four
+        ions, but it is not a monotonic function of $Z$ for this basis.
+\end{enumerate}
+
+\todo{This table must be recomputed and re-verified. The non-monotonicity
+must be reported honestly, not hidden.}
+
+\section{Reproduction on known functionals}
+
+Table~\ref{tab:repro} reports the same-basis SIE on the H atom and the
+same-basis delocalization error on stretched H$_2^+$ at $R = 10$~\AA, for
+three functionals whose behavior is well-established in the literature.
+The purpose of this section is to demonstrate that the diagnostic
+reproduces known rankings before it is applied to a new functional.
+
+\begin{table}[htbp]
+\centering
+\caption{Same-basis SIE (H atom) and $\Delta_{\rm deloc}$ (H$_2^+$,
+$R = 10$~\AA) for three known functionals. Basis: \texttt{def2-TZVP}.
+Values in mHa.}
+\label{tab:repro}
+\begin{tabular}{lrrr}
+\toprule
+Functional & H-atom SIE & H$_2^+$ $R{=}10$~\AA\ $\Delta$ & Comment \\
+\midrule
+PBE    & $+0.384$ & $+0.798$  & GGA \\
+r2SCAN & $+0.073$ & $+0.114$  & meta-GGA, constraint-aware \\
+B3LYP  & $-2.154$ & $-77.893$ & 20\% hybrid \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\todo{The B3LYP number $-77.893$~mHa is implausibly large. At
+$R = 10$~\AA, the exact separated-fragments limit is
+$E \approx -0.5$~Ha. A B3LYP energy of $-0.577893$~Ha at this geometry
+implies the SCF has converged to a solution roughly $78$~mHa below the
+exact separated-fragments energy, which is either (a) a symmetry-broken
+solution with the electron localized on one proton (in which case the
+energy should be near $-0.5$~Ha, not $-0.578$~Ha, and the number is
+wrong), (b) a non-converged SCF that hit the cycle limit, or (c) a bug
+in the input. Before this number is used anywhere, the calculation must
+be rerun with SCF stability analysis and Mulliken charge diagnostics
+reported.}
+
+\todo{The PBE and r2SCAN signs at $R = 10$~\AA\ are \emph{positive},
+meaning these functionals under-bind the stretched bond rather than
+over-bind it. The narrative in D2 called this ``delocalization error,''
+which is incorrect: delocalization error is over-binding
+($\Delta < 0$). Either the sign convention is inverted somewhere, or PBE
+and r2SCAN are showing a different pathology (under-binding) that requires
+separate framing. This must be resolved before any claim is made about
+these two functionals.}
+
+\section{CIDER26XCCHEM on the isoelectronic series}
+
+\begin{table}[htbp]
+\centering
+\caption{CIDER26XCCHEM SIE on the isoelectronic series, same-basis
+reference. Basis: \texttt{def2-TZVP}. Values in mHa.}
+\label{tab:cider-iso}
+\begin{tabular}{lrr}
+\toprule
+Ion & Naive SIE (vs.\ $-Z^2/2$) & Same-basis SIE (vs.\ UHF) \\
+\midrule
+H        & $0.574$ & $0.383$ \\
+He$^+$   & $5.047$ & $3.187$ \\
+Li$^{2+}$& $5.879$ & $4.451$ \\
+Be$^{3+}$& $9.784$ & $5.909$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The naive reference overestimates the same-basis SIE by a ratio of
+roughly $1.32$--$1.66$ across this series. This is the quantitative
+content of D1's recommendation: same-basis reference is not a cosmetic
+correction but changes the reported SIE by 30--66\%.
+
+\todo{These numbers must be recomputed as part of the master dataset.
+Cross-paper inconsistencies exist (see Chapter~\ref{ch:issues}).}
+
+\section{CIDER26XCCHEM on the H$_2^+$ dissociation curve}
+
+\subsection{Data}
+
+Table~\ref{tab:h2plus} reproduces the D3 H$_2^+$ scan. Columns:
+$R$; CIDER26XCCHEM energy; SCF convergence flag; Mulliken charges
+$q(\mathrm H_a)$, $q(\mathrm H_b)$; same-basis UHF reference energy;
+signed error $\Delta = \ECD - \EHF$; branch assignment.
+
+\begin{longtable}{rrrrrrl}
+\caption{CIDER26XCCHEM on the H$_2^+$ dissociation curve. Basis:
+\texttt{def2-TZVP}; convergence tolerance $10^{-10}$~Ha, up to 200 cycles.
+\label{tab:h2plus}}\\
+\toprule
+$R$ (\AA) & $\ECD$ (Ha) & conv.\ & $q_a$ & $q_b$ & $\EHF$ (Ha) & $\Delta$ (mHa) \\
+\midrule
+\endfirsthead
+\toprule
+$R$ (\AA) & $\ECD$ (Ha) & conv.\ & $q_a$ & $q_b$ & $\EHF$ (Ha) & $\Delta$ (mHa) \\
+\midrule
+\endhead
+0.50  & $-0.417745$ & yes & 0.500 & 0.500 & $-0.417839$ & $+0.094$ \\
+0.75  & $-0.571268$ & yes & 0.500 & 0.500 & $-0.571108$ & $-0.160$ \\
+1.06  & $-0.601529$ & yes & 0.500 & 0.500 & $-0.600965$ & $-0.564$ \\
+1.50  & $-0.579842$ & yes & 0.500 & 0.500 & $-0.578759$ & $-1.083$ \\
+2.00  & $-0.548119$ & yes & 0.500 & 0.500 & $-0.545618$ & $-2.502$ \\
+2.50  & $-0.533070$ & yes & 0.500 & 0.500 & $-0.524201$ & $-8.869$ \\
+3.00  & $-0.528867$ & yes & 0.500 & 0.500 & $-0.512060$ & $-16.808$ \\
+3.50  & $-0.529214$ & yes & 0.500 & 0.500 & $-0.505617$ & $-23.597$ \\
+4.00  & $-0.531640$ & yes & 0.500 & 0.500 & $-0.502439$ & $-29.201$ \\
+4.50  & $-0.534476$ & yes & 0.500 & 0.500 & $-0.500961$ & $-33.515$ \\
+5.00  & $-0.499066$ & no  & 0.000 & 1.000 & $-0.500305$ & $+1.238$ \\
+7.00  & $-0.498653$ & no  & 1.000 & 0.000 & $-0.499828$ & $+1.174$ \\
+10.00 & $-0.499350$ & no  & 1.000 & 0.000 & $-0.499812$ & $+0.462$ \\
+15.00 & $-0.499351$ & no  & 0.000 & 1.000 & $-0.499810$ & $+0.459$ \\
+\bottomrule
+\end{longtable}
+
+\subsection{Reading the curve}
+
+The data fall into three regimes:
+
+\begin{enumerate}
+  \item \textbf{Near equilibrium} ($R = 0.5$--$1.5$~\AA): SCF converges to
+        the symmetric solution ($q_a = q_b = 0.5$), error is small
+        ($|\Delta| < 1.1$~mHa).
+  \item \textbf{Stretching regime} ($R = 2.0$--$4.5$~\AA): SCF still
+        converges to the symmetric solution, but the error grows
+        monotonically from $-2.5$~mHa to $-33.5$~mHa. The negative sign
+        means the functional over-stabilizes the symmetric solution, which
+        is textbook delocalization error.
+  \item \textbf{Beyond the bifurcation} ($R \ge 5.0$~\AA): SCF does
+        \emph{not} converge within 200 cycles at $10^{-10}$ tolerance, and
+        the Mulliken charges are either $(0,1)$ or $(1,0)$, i.e., the
+        electron is localized on one proton. The apparent error is small
+        ($|\Delta| < 1.3$~mHa), but this is not a recovery; the functional
+        has switched to describing a different physical state (separated
+        fragments) rather than the true symmetric ground state.
+\end{enumerate}
+
+\subsection{The bifurcation}
+
+Between $R = 4.5$~\AA\ and $R = 5.0$~\AA, the character of the SCF
+solution changes qualitatively. This is a genuine bifurcation of the SCF
+solution landscape. \todo{It must be confirmed by:}
+
+\begin{itemize}
+  \item \todo{SCF stability analysis (\texttt{mf.stability()}) at every
+        geometry, to confirm both the symmetric and localized solutions
+        are genuine SCF stationary points.}
+  \item \todo{A second SCF calculation at each $R \ge 5.0$~\AA\ starting
+        from a symmetric initial guess, to confirm the symmetric solution
+        still exists (even if it is not the lowest one).}
+  \item \todo{Mulliken charges reported for both solutions.}
+\end{itemize}
+
+\subsection{Why the post-bifurcation error is small}
+
+At $R \ge 5.0$~\AA, the localized solution describes a neutral H atom plus
+a bare proton at large separation. Its energy is close to the isolated
+H-atom energy, which has a small SIE ($\sim 0.4$~mHa for CIDER26XCCHEM,
+from Table~\ref{tab:cider-iso}). The small apparent error beyond the
+bifurcation is therefore not a sign of the functional doing better; it is a
+sign of the functional having stopped attempting to describe the true
+delocalized state.
+
+\section{Refutation of the one-electron patch hypothesis}
+\label{sec:patch}
+
+\subsection{The hypothesis}
+
+Hypothesis H1 (from D4): if CIDER26XCCHEM's learned enhancement map is
+constrained to satisfy the exact one-electron limit, its SIE should shrink
+toward r2SCAN's without degrading multi-electron accuracy.
+
+\subsection{The proposed test and why it is vacuous}
+
+The most direct test is a global, per-system energy substitution gated on
+electron count:
+\begin{equation}
+E_{\rm patched}[\text{system}] =
+\begin{cases}
+\EHF(N{=}1;\text{same basis}) & \text{if } N_{\rm electron} = 1, \\
+E_\phi[\text{system}] & \text{otherwise}.
+\end{cases}
+\label{eq:patch}
+\end{equation}
+
+By Theorem~\ref{thm:hf-exact}, $\EHF(N{=}1)$ is exact in any basis, so
+the patched functional returns the exact answer on every one-electron
+system, regardless of which underlying functional $\phi$ is wrapped. The
+value $E_\phi$ is never consulted on the patched branch.
+
+This means Eq.~\eqref{eq:patch} cannot discriminate between functionals:
+PBE, B3LYP, and CIDER26XCCHEM all collapse to identical, exact results
+when patched. The patch is tautologically correct, and running it provides
+no evidence about the underlying functional's treatment of the one-electron
+limit.
+
+\begin{table}[htbp]
+\centering
+\caption{Raw vs.\ patched one-electron errors (mHa). The patched column
+is identically zero for every functional, by construction.}
+\label{tab:patch}
+\begin{tabular}{lrrrrrr}
+\toprule
+Ion & PBE raw & PBE patched & B3LYP raw & B3LYP patched & CIDER raw & CIDER patched \\
+\midrule
+H        & $+0.194$ & $0$ & $-2.344$ & $0$ & $+0.384$ & $0$ \\
+He$^+$   & $+6.050$ & $0$ & $+1.118$ & $0$ & $+3.187$ & $0$ \\
+Li$^{2+}$& $+12.462$& $0$ & $+5.493$ & $0$ & $+4.451$ & $0$ \\
+Be$^{3+}$& $+17.094$& $0$ & $+8.923$ & $0$ & $+5.909$ & $0$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\todo{The PBE and B3LYP raw numbers in this table must be reconciled with
+Table~\ref{tab:repro} (they disagree). Both must come from the master CSV.}
+
+\subsection{What a meaningful test would require}
+
+A genuine test of H1 must modify the functional's \emph{internal
+representation} --- e.g., its descriptor pipeline or its enhancement-factor
+spline --- so that the functional's own one-electron prediction changes,
+rather than being replaced after the fact. This is stated as a direction
+for future work, not as a result of the present one.
+
+\section{The constraint-residual poset is not totally ordered}
+
+\subsection{The two-axis comparison}
+
+Order a set of functionals by their residual vectors across multiple
+constraint axes. Two functionals are \emph{incomparable} if each is smaller
+on some axis. This is a partial order, not a total order.
+
+Table~\ref{tab:poset} reports residuals on two axes: same-basis SIE on
+the H atom, and same-basis delocalization error on H$_2^+$ at
+$R = 10$~\AA, for five functionals.
+
+\begin{table}[htbp]
+\centering
+\caption{Two-axis constraint residuals (mHa, absolute value).}
+\label{tab:poset}
+\begin{tabular}{lrr}
+\toprule
+Functional & $|\SIE|$ H atom & $|\Delta_{\rm deloc}|$ H$_2^+$ $R{=}10$~\AA \\
+\midrule
+PBE              & $0.384$ & $0.798$ \\
+r2SCAN           & $0.073$ & $0.110$ \\
+B3LYP            & $2.154$ & $77.893$ \\
+CIDER23X         & $2.554$ & $2.412$ \\
+CIDER26XCCHEM    & $0.574$ & $0.641$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Two pairs are incomparable under this order:
+\begin{itemize}
+  \item PBE vs.\ CIDER26XCCHEM: PBE has smaller SIE, CIDER has smaller
+        delocalization error.
+  \item B3LYP vs.\ CIDER23X: B3LYP has smaller SIE, CIDER23X has far
+        smaller delocalization error.
+\end{itemize}
+
+\todo{These numbers inherit the B3LYP anomaly from
+Section~\ref{sec:basis-incompleteness}. The B3LYP delocalization number
+($77.893$~mHa) must be verified before the incomparability claim is used.
+If B3LYP's number is wrong, the second incomparable pair may not survive.}
+
+\subsection{What this shows}
+
+A single scalar accuracy metric cannot summarize functional quality across
+these two axes. A functional can be better on one and worse on another,
+and no weighted combination of the two residuals can resolve this without
+an arbitrary choice of weights.
+
+% =====================================================================
+\chapter{Claims inventory}
+\label{ch:claims}
+% =====================================================================
+
+This chapter lists every claim the work makes, with an explicit
+confidence tag. Claims are the load-bearing statements; everything else in
+this report is scaffolding.
+
+\section{Verified claims}
+
+\begin{enumerate}
+  \item \verified{Hartree--Fock theory is exact for any one-electron
+        system, in any finite one-particle basis, at any geometry.}
+        Proof: Theorem~\ref{thm:hf-exact}. This is textbook.
+  \item \verified{The exact one-electron constraint on $\Exc$ is
+        $E_x[n] = -J[n]$, $E_c[n] = 0$.} Proof:
+        Eq.~\eqref{eq:sic-constraint}. Known since Perdew--Zunger 1981.
+  \item \verified{Same-basis UHF is therefore the exact reference for
+        one-electron SIE diagnostics, and comparing finite-basis DFT to
+        the infinite-basis hydrogenic value contaminates the measurement.}
+        This is a methodological recommendation; it is correct by
+        construction.
+  \item \verified{The exact ground state of H$_2^+$ is symmetric under
+        reflection through the bond midpoint, at every $R$, and the exact
+        Mulliken charges on the two protons are exactly $0.5$ each.}
+        Proof: Theorem~\ref{thm:h2-sym}. This is textbook.
+  \item \verified{A global, per-system energy substitution gated on
+        electron count is tautologically exact on every one-electron
+        system, for any underlying functional, and cannot discriminate
+        between functionals.} Proof: Theorem~\ref{thm:hf-exact} applied to
+        Eq.~\eqref{eq:patch}.
+  \item \verified{On the two-axis constraint-residual space, PBE and
+        CIDER26XCCHEM are incomparable.} Depends on
+        Table~\ref{tab:poset} numbers; the incomparability argument is
+        correct if the numbers are.
+\end{enumerate}
+
+\section{Tentative claims}
+
+\begin{enumerate}
+  \item \tentative{The naive infinite-basis reference inflates the
+        apparent SIE of CIDER26XCCHEM on the isoelectronic series by
+        30--66\%.} Based on Table~\ref{tab:cider-iso}; needs recomputation
+        from the master CSV.
+  \item \tentative{CIDER26XCCHEM develops a delocalization error on the
+        symmetric H$_2^+$ branch that grows monotonically from
+        $-2.5$~mHa at $R = 2.0$~\AA\ to $-33.5$~mHa at $R = 4.5$~\AA.}
+        Based on Table~\ref{tab:h2plus}; needs SCF stability confirmation.
+  \item \tentative{The H$_2^+$ SCF solution bifurcates between
+        $R = 4.5$~\AA\ and $R = 5.0$~\AA\ to a symmetry-broken solution
+        with the electron localized on one proton.} Based on Mulliken
+        charges in Table~\ref{tab:h2plus}; needs stability analysis and
+        a localized-initial-guess cross-check.
+  \item \tentative{The apparent small error beyond the bifurcation is not
+        a recovery but a signature of the functional describing separated
+        fragments.} Physical argument is sound; needs quantitative
+        confirmation (e.g., compare post-bifurcation energy to isolated
+        H-atom SIE).
+  \item \tentative{The constraint-residual order across the five
+        functionals tested is not total.} Based on Table~\ref{tab:poset};
+        depends on B3LYP number being correct.
+\end{enumerate}
+
+\section{Withdrawn or doubtful claims}
+
+\begin{enumerate}
+  \item \withdrawn{B3LYP shows a $77.9$~mHa delocalization error on
+        H$_2^+$ at $R = 10$~\AA.} The number is implausibly large and
+        likely reflects a non-converged or symmetry-broken SCF solution,
+        not delocalization error. Must be diagnosed.
+  \item \withdrawn{PBE and r2SCAN show delocalization error on stretched
+        H$_2^+$ at $R = 10$~\AA.} Their signed errors are \emph{positive}
+        (under-binding), not negative, so the label ``delocalization
+        error'' is wrong for these two. The correct description may be
+        under-binding of the symmetric solution; this needs separate
+        framing.
+  \item \withdrawn{The basis-incompleteness of the same-basis reference
+        grows monotonically with $Z$.} Table~\ref{tab:basis} shows it is
+        not monotonic (He$^+$ > Li$^{2+}$).
+  \item \withdrawn{Skala and CIDER converge on the same abstract design
+        principle.} D5 claimed this, but Skala was not actually run. The
+        claim rests on the published architecture of Skala, not on
+        independent verification.
+  \item \withdrawn{The categorical framing of constraints as a poset
+        provides new insight.} It provides bookkeeping, not new
+        mathematics. The useful content is the two-axis incomparability
+        argument, which does not require category theory.
+\end{enumerate}
+
+\section{Claims not made}
+
+Explicitly not claimed in this work:
+
+\begin{itemize}
+  \item That CIDER26XCCHEM is worse than any other functional overall.
+  \item That the bifurcation observed on H$_2^+$ occurs on any other
+        system (multi-electron molecules, solids, surfaces).
+  \item That the same-basis reference is the only correct reference
+        (it is correct, but other references may also be correct for
+        specific purposes).
+  \item That a patch based on one-electron exactness is useless in
+        general (it is useless for testing the hypothesis H1, but may
+        have other uses).
+  \item That Skala's architecture does or does not confer protection
+        against delocalization error (untested).
+\end{itemize}
+
+% =====================================================================
+\chapter{Known problems and open questions}
+\label{ch:issues}
+% =====================================================================
+
+This chapter is the most important for deciding what to do next. Every
+known problem with the work is listed here, with an assessment of severity
+and a suggested resolution.
+
+\section{Technical problems}
+
+\subsection{B3LYP anomaly on stretched H$_2^+$}
+\label{sec:b3lyp-problem}
+
+\textbf{Severity: high.}
+
+The D2 and D5 tables report B3LYP at $R = 10$~\AA\ giving
+$E = -0.577893$~Ha, which is $78$~mHa below the exact separated-fragments
+limit. This is either a non-converged SCF, a symmetry-broken solution, or
+a bug. Until it is diagnosed, all claims depending on this number are
+unsafe.
+
+\textbf{Resolution:} rerun B3LYP on the H$_2^+$ curve with stability
+analysis and Mulliken charges at every geometry. Report all solutions
+found.
+
+\subsection{Sign convention for PBE and r2SCAN delocalization error}
+
+\textbf{Severity: high.}
+
+D2's narrative calls the positive signed errors of PBE and r2SCAN
+``delocalization error,'' but positive $\Delta$ means under-binding, not
+over-binding. The terminology is wrong.
+
+\textbf{Resolution:} either invert the sign convention everywhere (and
+state it explicitly), or relabel the PBE/r2SCAN observations as
+under-binding, distinct from delocalization.
+
+\subsection{CIDER26XCCHEM SCF stability on H$_2^+$}
+
+\textbf{Severity: high.}
+
+The post-bifurcation ``localized branch'' energies were computed with
+\texttt{converged=False}. A non-converged SCF energy is not guaranteed to
+be a stationary point of the functional. The bifurcation might be an
+artifact of a limit cycle, not a genuine second solution.
+
+\textbf{Resolution:} run \texttt{mf.stability()} at every geometry;
+confirm the localized solution is a genuine minimum. Run a second SCF
+from a symmetric initial guess at $R \ge 5$~\AA\ to confirm the symmetric
+solution still exists (as a saddle or higher minimum).
+
+\subsection{Cross-paper numerical inconsistencies}
+
+\textbf{Severity: high.}
+
+The CIDER26XCCHEM H-atom SIE appears as $0.383$ in D1 and $0.574$ in D5.
+The CIDER26XCCHEM H$_2^+$ $R = 10$~\AA\ $\Delta$ appears as $0.462$ in D3
+and $0.641$ in D5. These are different numbers for what should be the same
+quantity.
+
+\textbf{Resolution:} rebuild everything from the master CSV. No
+hand-typed numbers in any table or figure.
+
+\subsection{Basis-set incompleteness not converged}
+
+\textbf{Severity: medium.}
+
+All results use \texttt{def2-TZVP}. Whether conclusions are basis-set
+independent is untested.
+
+\textbf{Resolution:} add \texttt{def2-SVP}, \texttt{def2-QZVP}, and
+\texttt{aug-cc-pVTZ} runs on the key systems.
+
+\subsection{Functional comparison incomplete}
+
+\textbf{Severity: medium.}
+
+Only PBE, r2SCAN, B3LYP, CIDER23X, and CIDER26XCCHEM are tested. SCAN is
+missing.
+
+\textbf{Resolution:} add SCAN. Optionally add a modern range-separated
+hybrid (e.g., $\omega$B97X-V) as a positive control.
+
+\subsection{The Skala claim is unverified}
+
+\textbf{Severity: medium.}
+
+D5 claims Skala and CIDER converge on the same design principle, but
+Skala was not run.
+
+\textbf{Resolution:} either run Skala (or a public reimplementation), or
+downgrade the claim to a Discussion remark with explicit acknowledgment
+that Skala was not tested.
+
+\section{Presentation problems}
+
+\subsection{AI coauthorship}
+
+\textbf{Severity: critical for publication.}
+
+All five drafts list ``Claude (Anthropic)'' as a coauthor. AI systems
+cannot be authors under essentially all journal and arXiv policies.
+
+\textbf{Resolution:} remove the AI coauthor from all author lists and the
+bibliography. Add an acknowledgements line: ``The author used an AI
+assistant for language editing and code drafting; all technical content
+and calculations were verified by the author.''
+
+\subsection{AI-slop language patterns}
+
+\textbf{Severity: high for publication.}
+
+Recurring patterns across the drafts:
+\begin{itemize}
+  \item ``to our knowledge for the first time''
+  \item ``we believe,'' ``we think''
+  \item ``precisely,'' ``exactly,'' ``genuinely,'' ``essentially'' used
+        as intensifiers
+  \item self-referential meta-commentary (``this is the crux of the
+        paper,'' ``we record that correction here for the record'')
+  \item defensive sentences (``this is not a numerical artifact,''
+        ``we flag this honestly'')
+  \item over-formalization of trivial results as Theorems/Corollaries
+  \item grand verbs (``culminating in,'' ``systematized as,'' ``reproduced
+        here in running code'')
+\end{itemize}
+
+\textbf{Resolution:} rewrite prose from scratch in the author's own voice.
+Do not edit the existing drafts; start with a blank page and the master
+CSV and figures.
+
+\subsection{Circular citations}
+
+\textbf{Severity: high for publication.}
+
+Every draft cites the others as ``companion manuscript (2026),'' creating
+mutual dependencies that no referee can evaluate.
+
+\textbf{Resolution:} consolidate into one paper. Do not submit as five
+mutually-citing manuscripts.
+
+\subsection{Over-formalization}
+
+\textbf{Severity: medium.}
+
+The $J_{11} = K_{11}$ identity does not need a Lemma and Proof. The patch
+refutation does not need a Theorem and Corollary. The categorical framework
+of D5 does not need a category-theoretic construction.
+
+\textbf{Resolution:} state trivial results as one-sentence observations.
+Reserve formal environments for genuinely non-trivial results (of which
+this work has essentially none; the real content is numerical).
+
+\section{Open scientific questions}
+
+\begin{enumerate}
+  \item Does the H$_2^+$ bifurcation occur with other machine-learned
+        functionals? With other one-electron bonds (HeH$^{2+}$,
+        H$_2^{2+}$)?
+  \item Does the bifurcation occur on any multi-electron system, or is
+        it specific to the one-electron case?
+  \item What is the relationship between the bifurcation and the
+        functional's violation of piecewise linearity in fractional
+        particle number? D3's Section 5 speculated on this but did not
+        demonstrate it.
+  \item Does CIDER26XCCHEM's scaling-covariance guarantee (from its
+        descriptor design) provide any protection against
+        delocalization error? The H$_2^+$ result suggests it does not,
+        but this is one system.
+  \item What is the right architecture for a machine-learned functional
+        that avoids the bifurcation? This is the natural follow-up
+        question, but it is a separate research project.
+\end{enumerate}
+
+% =====================================================================
+\chapter{Future work}
+\label{ch:future}
+% =====================================================================
+
+\section{Immediate actions (next two weeks)}
+
+In order:
+
+\begin{enumerate}
+  \item \textbf{Diagnose B3LYP on stretched H$_2^+$.} Rerun with
+        \texttt{mf.stability()} and Mulliken charges at every geometry.
+        Determine whether the $-78$~mHa is a non-converged SCF, a
+        symmetry-broken solution, or a bug. This is the highest-priority
+        calculation because it determines whether D2 and D5 retain any
+        content.
+
+  \item \textbf{Confirm CIDER26XCCHEM bifurcation.} Run
+        \texttt{mf.stability()} at every $R$ in the H$_2^+$ scan. Add
+        $R = 5.5$ and $R = 6.0$~\AA. Run a second SCF at $R \ge 5$~\AA\
+        from a symmetric initial guess. Confirm the localized solution is
+        a genuine minimum.
+
+  \item \textbf{Build the master CSV.} One file, one convention, all
+        functionals, all systems. Every subsequent table and figure is
+        generated from this file.
+
+  \item \textbf{Recompute all numbers.} Regenerate every table and figure
+        from the master CSV. Do not carry any hand-typed number forward.
+\end{enumerate}
+
+\section{Short-term actions (next two months)}
+
+\begin{enumerate}
+  \item Add \texttt{def2-SVP}, \texttt{def2-QZVP} basis sets to key
+        systems to demonstrate basis independence.
+  \item Add SCAN and one range-separated hybrid to the comparison.
+  \item Run Skala if possible; otherwise remove the Skala claim.
+  \item Write the paper (see Section~\ref{sec:paper-plan}).
+\end{enumerate}
+
+\section{Long-term questions (next year)}
+
+\begin{enumerate}
+  \item Extend the diagnostic to multi-electron systems. The
+        same-basis UHF reference is exact only for $N = 1$; for
+        $N > 1$ a different exact reference is needed (e.g., full CI in
+        the same basis). This is computationally expensive but
+        conceptually straightforward.
+  \item Extend to excited states and to non-equilibrium geometries.
+  \item Extend to periodic systems (solid-state DFT). The H$_2^+$
+        pathology likely has a solid-state analogue in stretched
+        one-electron bonds.
+  \item Investigate the relationship between the bifurcation and the
+        fractional-charge piecewise-linearity constraint, which D3
+        speculated about but did not demonstrate.
+\end{enumerate}
+
+\section{Recommended paper structure}
+\label{sec:paper-plan}
+
+If the CIDER26XCCHEM bifurcation survives stability analysis, write
+\textbf{one paper}, not five. Structure:
+
+\begin{enumerate}
+  \item \textbf{Introduction} (1 page). DFT, exact constraints,
+        one-electron SIE, delocalization error, machine-learned
+        functionals. State that the paper tests whether an
+        architecturally constraint-aware ML functional is protected
+        against the one-electron symmetry dilemma.
+
+  \item \textbf{Theory and methods} (1.5 pages). Same-basis HF exactness
+        (Theorem~\ref{thm:hf-exact}, stated but not over-formalized),
+        same-basis reference, definition of $\SIE$ and $\Delta_{\rm
+        deloc}$, computational setup.
+
+  \item \textbf{Validation} (1 page). Reproductions on PBE, r2SCAN,
+        B3LYP on the isoelectronic series and on H$_2^+$ at
+        $R = 10$~\AA. Show that the diagnostic recovers known rankings.
+
+  \item \textbf{Main result: H$_2^+$ bifurcation} (2 pages). The
+        CIDER26XCCHEM H$_2^+$ curve, symmetric branch, delocalization
+        error growth, bifurcation, localized branch, stability analysis.
+
+  \item \textbf{Discussion} (1 page). Why the apparent post-bifurcation
+        error recovery is not a recovery. The two-axis constraint-residual
+        poset and the non-totality of functional ordering. Brief remark
+        on the patch refutation.
+
+  \item \textbf{Conclusion} (0.5 page). Recommendation: same-basis UHF
+        as standard reference for one-electron SIE diagnostics; ML
+        functional designers should test for symmetry breaking on
+        stretched one-electron bonds.
+
+  \item \textbf{Supporting information}: code, master CSV, convergence
+        tables, additional basis sets.
+\end{enumerate}
+
+Target journal: \emph{J. Chem. Theory Comput.} or \emph{J. Chem. Phys.}
+Length: 6--8 pages main text plus SI.
+
+If the bifurcation does \emph{not} survive stability analysis, the paper
+shrinks to a methods note on the same-basis reference, probably not
+publishable in a top journal but suitable for a pedagogical venue or as
+a section in someone else's paper.
+
+% =====================================================================
+\appendix
+% =====================================================================
+
+\chapter{Code snippets}
+
+\section{PySCF setup for one-electron calculations}
+
+\begin{verbatim}
+from pyscf import gto, dft, scf
+
+def run_dft(system, xc, R=None, basis="def2-tzvp", tight=True):
+    if R is None:
+        atom = system
+        charge, spin = 0, 1   # adjust per ion
+    else:
+        atom = f"H 0 0 0; H 0 0 {R}"
+        charge, spin = 1, 1
+    mol = gto.M(atom=atom, basis=basis, charge=charge,
+                spin=spin, verbose=0)
+    mf = dft.UKS(mol)
+    mf.xc = xc
+    if tight:
+        mf.conv_tol = 1e-10
+        mf.max_cycle = 200
+    mf.kernel()
+    charges = mf.mulliken_pop(verbose=0)[1]
+    return {
+        "E": mf.e_tot,
+        "converged": mf.converged,
+        "cycles": mf.cycles,
+        "charges": charges,
+    }
+
+def run_uhf_reference(system, R=None, basis="def2-tzvp", tight=True):
+    # identical setup but scf.UHF; energy is exact for N=1
+    ...
+\end{verbatim}
+
+\section{SCF stability analysis}
+
+\begin{verbatim}
+mf.kernel()
+mf.stability()   # returns dict with internal/external stability info
+\end{verbatim}
+
+\todo{Record the exact output of \texttt{mf.stability()} for every
+geometry in the master CSV, not just a boolean.}
+
+\chapter{Raw data tables}
+
+The master CSV is the authoritative source. Tables in
+Chapter~\ref{ch:results} are reproductions of the corresponding CSV
+slices. Any discrepancy between a table in this report and the CSV is a
+reporting error to be fixed.
+
+\todo{Generate this appendix automatically from the master CSV.}
+
+% =====================================================================
+\chapter*{Acknowledgements}
+\addcontentsline{toc}{chapter}{Acknowledgements}
+% =====================================================================
+
+\todo{The AI coauthorship from the original drafts is removed in this
+report. Add an acknowledgement line for any AI assistance received during
+drafting, following the policy of the target journal.}
+
+% =====================================================================
+\begin{thebibliography}{99}
+% =====================================================================
+
+\bibitem{PZ1981}
+J.~P.~Perdew and A.~Zunger,
+\emph{Self-interaction correction to density-functional approximations
+for many-electron systems},
+Phys.\ Rev.\ B \textbf{23}, 5048 (1981).
+
+\bibitem{PPLB1982}
+J.~P.~Perdew, R.~G.~Parr, M.~Levy, and J.~L.~Balduz Jr.,
+\emph{Density-functional theory for fractional particle number:
+derivative discontinuities of the energy},
+Phys.\ Rev.\ Lett.\ \textbf{49}, 1691 (1982).
+
+\bibitem{LO1981}
+E.~H.~Lieb and S.~Oxford,
+\emph{Improved lower bound on the indirect Coulomb energy},
+Int.\ J.\ Quantum Chem.\ \textbf{19}, 427 (1981).
+
+\bibitem{PBE1996}
+J.~P.~Perdew, K.~Burke, and M.~Ernzerhof,
+\emph{Generalized gradient approximation made simple},
+Phys.\ Rev.\ Lett.\ \textbf{77}, 3865 (1996).
+
+\bibitem{SCAN2015}
+J.~Sun, A.~Ruzsinszky, and J.~P.~Perdew,
+\emph{Strongly constrained and appropriately normed semilocal density
+functional},
+Phys.\ Rev.\ Lett.\ \textbf{115}, 036402 (2015).
+
+\bibitem{r2SCAN2020}
+J.~W.~Furness, A.~D.~Kaplan, J.~Ning, J.~P.~Perdew, and J.~Sun,
+\emph{Accurate and numerically efficient r$^2$SCAN
+meta-generalized gradient approximation},
+J.\ Phys.\ Chem.\ Lett.\ \textbf{11}, 8208 (2020).
+
+\bibitem{B3LYP1994}
+P.~J.~Stephens, F.~J.~Devlin, C.~F.~Chabalowski, and M.~J.~Frisch,
+\emph{Ab initio calculation of vibrational absorption and circular
+dichroism spectra using density functional force fields},
+J.\ Phys.\ Chem.\ \textbf{98}, 11623 (1994).
+
+\bibitem{Lowdin1963}
+P.-O.~L\"owdin,
+\emph{Symmetry dilemmas in Hartree--Fock theory},
+Rev.\ Mod.\ Phys.\ \textbf{35}, 496 (1963).
+
+\bibitem{CMSY2008}
+A.~J.~Cohen, P.~Mori-S\'anchez, and W.~Yang,
+\emph{Insights into current limitations of density functional theory},
+Science \textbf{321}, 792 (2008).
+
+\bibitem{CMSY2012}
+A.~J.~Cohen, P.~Mori-S\'anchez, and W.~Yang,
+\emph{Challenges for density functional theory},
+Chem.\ Rev.\ \textbf{112}, 289 (2012).
+
+\bibitem{CIDER2022}
+A.~D.~Bystrom and B.~Kozinsky,
+\emph{CIDER: an expressive, nonlocal feature set for machine learning
+density functionals with exact constraints},
+J.\ Chem.\ Theory Comput.\ \textbf{18}, 2180 (2022).
+
+\bibitem{CIDER2024}
+A.~D.~Bystrom and B.~Kozinsky,
+\emph{Successor CIDER23X generation},
+Phys.\ Rev.\ B (2024).
+
+\bibitem{CIDER26}
+A.~D.~Bystrom and B.~Kozinsky,
+\emph{CIDER26: a machine-learned exchange--correlation functional for
+molecules, solids, and surfaces},
+arXiv:2608.21525 (2026).
+
+\bibitem{Skala2025}
+Microsoft Research AI for Science,
+\emph{Skala: a machine-learned exchange--correlation functional}, (2025).
+
+\bibitem{e3nn}
+M.~Geiger and T.~Smidt,
+\emph{e3nn: Euclidean Neural Networks},
+arXiv:2207.09453 (2022).
+
+\end{thebibliography}
+
+\end{document}
