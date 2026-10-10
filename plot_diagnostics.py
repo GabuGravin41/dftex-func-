@@ -131,7 +131,7 @@ def plot_basis_incompleteness(csv_path="master_dft_one_electron_dataset.csv"):
         ax2.plot(sub["Z"], sub["SIE_same"], marker="o", color=c,
                  linewidth=2.2, label=f"{f} (Same-Basis Reference)", markersize=7.5)
         ax2.plot(sub["Z"], sub["SIE_naive"], marker="X", linestyle="--", color=c,
-                 alpha=0.65, linewidth=1.6, label=f"{f} (Naive $E_{{\infty}}$ Reference)", markersize=7.0)
+                 alpha=0.65, linewidth=1.6, label=f"{f} (Naive " + r"$E_{\infty}$" + " Reference)", markersize=7.0)
 
     ax2.set_xlabel(r"Nuclear Charge $Z$", fontweight="bold")
     ax2.set_ylabel(r"Self-Interaction Error (SIE) [mHa]", fontweight="bold")
@@ -265,7 +265,7 @@ def plot_h2plus_dissociation(csv_path="master_dft_one_electron_dataset.csv"):
     ax3.axhline(1.0, color="gray", linestyle="-.", linewidth=1.2, label=r"Fully Localized State ($1.0 / 0.0$)")
     ax3.legend(frameon=True, framealpha=0.92, facecolor="#ffffff", edgecolor="#cccccc", fontsize=9.0, loc="center right")
 
-    plt.tight_layout()
+    # Spacing managed explicitly via GridSpec hspace and wspace
     pdf_out = os.path.join(OUTPUT_DIR, "fig2_h2plus_bifurcation.pdf")
     png_out = os.path.join(OUTPUT_DIR, "fig2_h2plus_bifurcation.png")
     fig.savefig(pdf_out)
