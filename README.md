@@ -13,13 +13,13 @@
 
 ## 1. Overview & Theoretical Framework
 
-Machine-learned (ML) exchange–correlation functionals are frequently trained against extensive thermochemical and molecular equilibrium geometries. However, their physical behavior under extreme one-electron regimes—where the exact Hartree–Fock exchange energy is identical to the exact Full Configuration Interaction (FCI) limit—reveals fundamental diagnostic properties.
+Machine-learned (ML) exchange–correlation functionals are frequently trained against extensive thermochemical and molecular equilibrium geometries. It has come to the attention of the author that their physical behavior under extreme one-electron regimes—where the exact Hartree–Fock exchange energy is identical to the exact Full Configuration Interaction (FCI) limit—reveals fundamental diagnostic properties worth looking into.
 
-This repository contains the rigorous computational verification suite and master empirical dataset evaluating:
+This repository contains the computational verification suite and empirical dataset evaluating:
 1. **The Same-Basis Reference**: Demonstrating that naive self-interaction error (SIE) measurements ($E_{\text{DFT}} - E_{\text{exact}}^\infty$) are contaminated by basis incompleteness (up to **49.5%** in triple-$\zeta$ sets), whereas the same-basis reference ($E_{\text{DFT}} - E_{\text{UHF}}^{\text{basis}}$) isolates pure functional error.
 2. **The B3LYP Delocalization Anomaly**: Resolving why B3LYP plunges to $-78.082\ \text{mHa}$ on stretched $\text{H}_2^+$ at $R = 10\ \text{\AA}$ (the symmetric saddle-point solution with fractional charges $q_a = q_b = 0.5$ under semilocal convex bowing).
 3. **The PBE / r2SCAN Symmetry Transition**: Showing that semilocal functionals undergo a pitchfork bifurcation at $R_c \approx 5.5\text{--}6.0\ \text{\AA}$, collapsing onto the localized atomic branch ($q_a = 0.000, q_b = 1.000$) where $\Delta > 0$ reflects one-center atomic self-interaction.
-4. **Regularization Necessity in meta-GGAs**: Documenting the complete numerical divergence of standard SCAN on bare hydrogenic cations ($\text{Li}^{2+}$ and $\text{Be}^{3+}$, error $> 6900\ \text{mHa}$) and demonstrating how `r2SCAN` completely cures this divergence.
+4. **Regularization Necessity in meta-GGAs**: Documenting the complete numerical divergence of standard SCAN on bare hydrogenic cations ($\text{Li}^{2+}$ and $\text{Be}^{3+}$, error $> 6900\ \text{mHa}$) and demonstrating how `r2SCAN` makes up for this divergence.
 
 ---
 
@@ -47,7 +47,7 @@ The basis-incompleteness error is defined as $\Delta_{\text{basis}} = E_{\text{U
 | | Li$^{2+}$ | 3 | $-4.500000$ | $-4.498876$ | **$1.123980$** |
 | | Be$^{3+}$ | 4 | $-8.000000$ | $-7.981410$ | **$18.589638$** |
 
-*Non-Monotonicity Note*: In `def2-TZVP`, $\text{He}^+$ has larger incompleteness than $\text{Li}^{2+}$ because Karlsruhe basis sets are parameterized for neutral atom valence states rather than bare hydrogenic cations. In `def2-QZVP`, this gap collapses to the sub-millihartree regime ($0.168\ \text{mHa}$ vs $1.166\ \text{mHa}$).
+*Non-Monotonicity Note*: In `def2-TZVP`, $\text{He}^+$ has larger incompleteness than $\text{Li}^{2+}$ because Karlsruhe basis sets are parameterized for neutral atom valence states rather than bare hydrogenic cations. In `def2-QZVP`, this gap collapses to the sub-millihartree range ($0.168\ \text{mHa}$ vs $1.166\ \text{mHa}$).
 
 ---
 
@@ -103,19 +103,19 @@ Comparison between naive SIE and same-basis SIE in `def2-TZVP`:
 
 ```text
 .
-├── README.md                           # Master empirical report & research documentation
-├── working_report.tex                  # Comprehensive LaTeX research report & manuscript draft
-├── master_dft_one_electron_dataset.csv # Full empirical dataset (98 verified SCF runs)
-├── plot_diagnostics.py                 # Publication-grade plotting script (JCTC/JCP 600 DPI vector)
-├── fig1_basis_incompleteness.pdf       # Publication Figure 1 (vector PDF)
-├── fig1_basis_incompleteness.png       # Publication Figure 1 (high-res 600 DPI PNG)
-├── fig2_h2plus_bifurcation.pdf         # Publication Figure 2 (vector PDF)
-├── fig2_h2plus_bifurcation.png         # Publication Figure 2 (high-res 600 DPI PNG)
-└── kaggle_kernel/                      # Cloud verification pipeline
-    ├── build_notebook.py               # Automated notebook generator with kernelspec metadata
-    ├── run_verification.py             # Standalone Python verification script
-    ├── kernel-metadata.json            # Kaggle API kernel configuration
-    └── verification_notebook.ipynb     # Interactive Jupyter notebook
+├── README.md                           # research documentation
+├── working_report.tex                  # LaTeX report & manuscript draft
+├── master_dft_one_electron_dataset.csv # dataset (98 verified SCF runs)
+├── plot_diagnostics.py                 # plotting script (JCTC/JCP 600 DPI vector)
+├── fig1_basis_incompleteness.pdf       
+├── fig1_basis_incompleteness.png       
+├── fig2_h2plus_bifurcation.pdf         
+├── fig2_h2plus_bifurcation.png       
+└── kaggle_kernel/                      # kaggle notebook for experiments
+    ├── build_notebook.py               
+    ├── run_verification.py            
+    ├── kernel-metadata.json           
+    └── verification_notebook.ipynb    
 ```
 
 ---
