@@ -90,7 +90,7 @@ Comparison between naive SIE and same-basis SIE in `def2-TZVP`:
 
 ---
 
-## 3. Publication Figures
+## 3. Figures
 
 | Figure 1: Basis-Incompleteness Scaling | Figure 2: $\text{H}_2^+$ Dissociation Bifurcation |
 | :---: | :---: |
