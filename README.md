@@ -6,7 +6,7 @@
 [![Target](https://img.shields.io/badge/Target-JCTC%20%2F%20JCP-orange.svg)]()
 
 **Author**: Dalton Omondi  
-**Affiliation**: Computational Chemistry & Theoretical Physics Research  
+**Affiliation**: Electrical and Electronics Engineering // Kenyatta University  
 **Topic**: Empirical Self-Interaction Diagnostics, Basis-Incompleteness Corrections, and Symmetry-Breaking Bifurcations in Density Functional Theory
 
 ---
